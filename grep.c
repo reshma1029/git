@@ -66,11 +66,6 @@ static const char *color_grep_slots[] = {
 	[GREP_COLOR_SEP]	    = "separator",
 };
 
-static void color_set(char *dst, const char *color_bytes)
-{
-	xsnprintf(dst, COLOR_MAXLEN, "%s", color_bytes);
-}
-
 static int parse_pattern_type_arg(const char *opt, const char *arg)
 {
 	if (!strcmp(arg, "default"))
@@ -158,7 +153,6 @@ int grep_config(const char *var, const char *value, void *cb)
 void grep_init(struct grep_opt *opt, struct repository *repo, const char *prefix)
 {
 	struct grep_opt *def = &grep_defaults;
-	int i;
 
 #if defined(USE_LIBPCRE2)
 	if (!pcre2_global_context)
@@ -189,8 +183,7 @@ void grep_init(struct grep_opt *opt, struct repository *repo, const char *prefix
 	opt->relative = def->relative;
 	opt->output = def->output;
 
-	for (i = 0; i < NR_GREP_COLORS; i++)
-		color_set(opt->colors[i], def->colors[i]);
+	memcpy(opt->colors, def->colors, sizeof(def->colors));
 }
 
 void grep_destroy(void)
