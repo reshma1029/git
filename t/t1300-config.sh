@@ -1917,4 +1917,152 @@ test_expect_success '--replace-all does not invent newlines' '
 	test_cmp expect .git/config
 '
 
+test_expect_success 'set all config with value_regex' '
+	git config --file=initial abc.key one &&
+
+	cp initial config &&
+	git config --file=config abc.key two a+ &&
+	git config --file=config --list >actual &&
+	cat >expect <<-\EOF &&
+	abc.key=one
+	abc.key=two
+	EOF
+	test_cmp expect actual &&
+
+	test_must_fail git config --file=config abc.key three o+ 2>err &&
+	test_i18ngrep "has multiple values" err &&
+	git config --file=config abc.key three a+ &&
+	git config --file=config --list >actual &&
+	cat >expect <<-\EOF &&
+	abc.key=one
+	abc.key=two
+	abc.key=three
+	EOF
+	test_cmp expect actual &&
+
+	cp initial config &&
+	git config --file=config abc.key three o+ &&
+	git config --file=config --list >actual &&
+	cat >expect <<-\EOF &&
+	abc.key=three
+	EOF
+	test_cmp expect actual
+'
+
+test_expect_success '--replace-all and value_regex' '
+	rm -f config &&
+	git config --file=config --add abc.key one &&
+	git config --file=config --add abc.key two &&
+	git config --file=config --add abc.key three &&
+	git config --file=config --replace-all abc.key four "o+" &&
+	git config --file=config --list >actual &&
+	cat >expect <<-\EOF &&
+	abc.key=four
+	abc.key=three
+	EOF
+	test_cmp expect actual
+'
+
+test_expect_success 'refuse --fixed-value for incompatible actions' '
+	git config --file=config dev.null bogus &&
+
+	# These modes do not allow --fixed-value at all
+	test_must_fail git config --file=config --fixed-value --add dev.null bogus &&
+	test_must_fail git config --file=config --fixed-value --get-urlmatch dev.null bogus &&
+	test_must_fail git config --file=config --fixed-value --get-urlmatch dev.null bogus &&
+	test_must_fail git config --file=config --fixed-value --rename-section dev null &&
+	test_must_fail git config --file=config --fixed-value --remove-section dev &&
+	test_must_fail git config --file=config --fixed-value --list &&
+	test_must_fail git config --file=config --fixed-value --get-color dev.null &&
+	test_must_fail git config --file=config --fixed-value --get-colorbool dev.null &&
+
+	# These modes complain when --fixed-value has no value_regex
+	test_must_fail git config --file=config --fixed-value dev.null bogus &&
+	test_must_fail git config --file=config --fixed-value --replace-all dev.null bogus &&
+	test_must_fail git config --file=config --fixed-value --get dev.null &&
+	test_must_fail git config --file=config --fixed-value --get-all dev.null &&
+	test_must_fail git config --file=config --fixed-value --get-regexp "dev.*" &&
+	test_must_fail git config --file=config --fixed-value --unset dev.null &&
+	test_must_fail git config --file=config --fixed-value --unset-all dev.null
+'
+
+test_expect_success '--fixed-value uses exact string matching' '
+	GLOB="a+b*c?d[e]f.g" &&
+	rm -f initial &&
+	git config --file=initial fixed.test "$GLOB" &&
+
+	cp initial config &&
+	git config --file=config fixed.test bogus "$GLOB" &&
+	git config --file=config --list >actual &&
+	cat >expect <<-EOF &&
+	fixed.test=$GLOB
+	fixed.test=bogus
+	EOF
+	test_cmp expect actual &&
+
+	cp initial config &&
+	git config --file=config --fixed-value fixed.test bogus "$GLOB" &&
+	git config --file=config --list >actual &&
+	printf "fixed.test=bogus\n" >expect &&
+	test_cmp expect actual &&
+
+	cp initial config &&
+	test_must_fail git config --file=config --unset fixed.test "$GLOB" &&
+	git config --file=config --fixed-value --unset fixed.test "$GLOB" &&
+	test_must_fail git config --file=config fixed.test &&
+
+	cp initial config &&
+	test_must_fail git config --file=config --unset-all fixed.test "$GLOB" &&
+	git config --file=config --fixed-value --unset-all fixed.test "$GLOB" &&
+	test_must_fail git config --file=config fixed.test &&
+
+	cp initial config &&
+	git config --file=config --replace-all fixed.test bogus "$GLOB" &&
+	git config --file=config --list >actual &&
+	cat >expect <<-EOF &&
+	fixed.test=$GLOB
+	fixed.test=bogus
+	EOF
+	test_cmp expect actual &&
+
+	cp initial config &&
+	git config --file=config --replace-all fixed.test bogus "$GLOB" &&
+	git config --file=config --list >actual &&
+	cat >expect <<-EOF &&
+	fixed.test=$GLOB
+	fixed.test=bogus
+	EOF
+	test_cmp expect actual &&
+
+	git config --file=config --fixed-value --replace-all fixed.test bogus "$GLOB" &&
+	git config --file=config --list >actual &&
+	cat >expect <<-EOF &&
+	fixed.test=bogus
+	fixed.test=bogus
+	EOF
+	test_cmp expect actual
+'
+
+test_expect_success '--get and --get-all with --fixed-value' '
+	GLOB="a+b*c?d[e]f.g" &&
+	rm -f config &&
+	git config --file=config fixed.test bogus &&
+	git config --file=config --add fixed.test "$GLOB" &&
+
+	git config --file=config --get fixed.test bogus &&
+	test_must_fail git config --file=config --get fixed.test "$GLOB" &&
+	git config --file=config --get --fixed-value fixed.test "$GLOB" &&
+	test_must_fail git config --file=config --get --fixed-value fixed.test non-existent &&
+
+	git config --file=config --get-all fixed.test bogus &&
+	test_must_fail git config --file=config --get-all fixed.test "$GLOB" &&
+	git config --file=config --get-all --fixed-value fixed.test "$GLOB" &&
+	test_must_fail git config --file=config --get-all --fixed-value fixed.test non-existent &&
+
+	git config --file=config --get-regexp fixed+ bogus &&
+	test_must_fail git config --file=config --get-regexp fixed+ "$GLOB" &&
+	git config --file=config --get-regexp --fixed-value fixed+ "$GLOB" &&
+	test_must_fail git config --file=config --get-regexp --fixed-value fixed+ non-existent
+'
+
 test_done
